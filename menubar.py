@@ -1,0 +1,226 @@
+"""
+ProPresenter Converter — Menu Bar Agent
+Runs as a macOS status bar icon (no dock icon).
+Provides quick access to conversion without opening the full window.
+"""
+
+import os
+import sys
+import subprocess
+import threading
+
+# Ensure venv site-packages and project root are on the path
+_here = os.path.dirname(os.path.abspath(__file__))
+_site = os.path.join(_here, "venv", "lib",
+                     f"python{sys.version_info.major}.{sys.version_info.minor}",
+                     "site-packages")
+if os.path.isdir(_site):
+    sys.path.insert(0, _site)
+sys.path.insert(0, _here)
+
+import rumps
+
+# Import the converter core (no GUI)
+from pro_to_pptx import (
+    FolderWatcher, convert_file, _history,
+    DEFAULT_WATCH_FOLDER, WATCHDOG_AVAILABLE
+)
+
+ICON_PATH = os.path.join(_here,
+    "ProPresenter Converter.app", "Contents", "Resources", "AppIcon.icns")
+
+
+class ConverterMenuBarApp(rumps.App):
+
+    def __init__(self):
+        super().__init__(
+            name="ProPresenter Converter",
+            icon=ICON_PATH if os.path.exists(ICON_PATH) else None,
+            quit_button=None   # we'll add our own at the bottom
+        )
+
+        self._watcher: FolderWatcher = None
+        self._watch_dir  = DEFAULT_WATCH_FOLDER
+        self._output_dir = ""
+
+        self._build_menu()
+
+    # ------------------------------------------------------------------
+    # Menu construction
+    # ------------------------------------------------------------------
+
+    def _build_menu(self):
+        self.menu = [
+            rumps.MenuItem("Open Converter Window", callback=self.open_window),
+            None,  # separator
+            rumps.MenuItem("Watch Folder", callback=self.toggle_watch),
+            rumps.MenuItem("Convert Existing Files", callback=self.convert_existing),
+            None,
+            rumps.MenuItem("Set Watch Folder…", callback=self.set_watch_folder),
+            rumps.MenuItem("Set Output Folder…", callback=self.set_output_folder),
+            None,
+            rumps.MenuItem("Quit", callback=self.quit_app),
+        ]
+        self._update_watch_labels()
+
+    def _update_watch_labels(self):
+        watch_label = os.path.basename(self._watch_dir) or self._watch_dir
+        out_label   = os.path.basename(self._output_dir) or "Not set"
+        self.menu["Set Watch Folder…"].title  = f"Watch Folder: {watch_label}"
+        self.menu["Set Output Folder…"].title = f"Output Folder: {out_label}"
+
+    # ------------------------------------------------------------------
+    # Actions
+    # ------------------------------------------------------------------
+
+    def open_window(self, _):
+        """Launch the full tkinter GUI as a separate process."""
+        python = os.path.join(_here, "venv", "bin", "python3.13")
+        script = os.path.join(_here, "pro_to_pptx.py")
+        subprocess.Popen([python, script])
+
+    def toggle_watch(self, sender):
+        if self._watcher and self._watcher.running:
+            self._stop_watch()
+        else:
+            self._start_watch()
+
+    def _start_watch(self):
+        if not WATCHDOG_AVAILABLE:
+            rumps.alert("Missing Dependency",
+                        "watchdog is not installed.\nRun: pip install watchdog")
+            return
+        if not self._output_dir:
+            rumps.alert("No Output Folder",
+                        "Please set an output folder first\n(Output Folder menu item).")
+            return
+        if not os.path.isdir(self._watch_dir):
+            rumps.alert("Watch Folder Not Found",
+                        f"Folder does not exist:\n{self._watch_dir}")
+            return
+
+        os.makedirs(self._output_dir, exist_ok=True)
+
+        self._watcher = FolderWatcher(
+            self._watch_dir,
+            self._output_dir,
+            callback=self._on_watch_event
+        )
+        self._watcher.start()
+        self.menu["Watch Folder"].title = "⏹ Stop Watching"
+        self.title = "👁"   # show a subtle indicator in the menu bar text
+
+    def _stop_watch(self):
+        if self._watcher:
+            self._watcher.stop()
+            self._watcher = None
+        self.menu["Watch Folder"].title = "▶ Start Watching"
+        self.title = None
+
+    def _on_watch_event(self, pro_path, result):
+        name = os.path.basename(pro_path)
+        # Show a macOS notification
+        rumps.notification(
+            title="ProPresenter Converter",
+            subtitle=name,
+            message=result,
+            sound=False
+        )
+
+    def convert_existing(self, _):
+        if not self._output_dir:
+            rumps.alert("No Output Folder",
+                        "Please set an output folder first.")
+            return
+        if not os.path.isdir(self._watch_dir):
+            rumps.alert("Watch Folder Not Found",
+                        f"Folder does not exist:\n{self._watch_dir}")
+            return
+
+        # Collect unconverted files
+        pro_files = []
+        for dirpath, _, filenames in os.walk(self._watch_dir):
+            for fn in filenames:
+                if fn.endswith(".pro"):
+                    pro_files.append(os.path.join(dirpath, fn))
+
+        new_files = [p for p in pro_files if not _history.is_converted(p)]
+        skipped   = len(pro_files) - len(new_files)
+
+        if not new_files:
+            rumps.alert("Nothing to Convert",
+                        f"All {len(pro_files)} file(s) already converted.\n"
+                        f"Use the full window to clear history.")
+            return
+
+        msg = f"{len(new_files)} file(s) to convert"
+        if skipped:
+            msg += f" ({skipped} already done, skipping)"
+
+        response = rumps.alert(
+            title="Convert Existing Files",
+            message=msg + f"\nWatch: {self._watch_dir}\nOutput: {self._output_dir}",
+            ok="Convert", cancel="Cancel"
+        )
+        if response.clicked != 1:
+            return
+
+        threading.Thread(
+            target=self._run_batch,
+            args=(new_files,),
+            daemon=True
+        ).start()
+
+    def _run_batch(self, files):
+        done, errors = 0, 0
+        for path in files:
+            try:
+                convert_file(path, self._output_dir)
+                done += 1
+            except Exception:
+                errors += 1
+
+        msg = f"{done} file(s) converted"
+        if errors:
+            msg += f", {errors} failed"
+        rumps.notification(
+            title="ProPresenter Converter",
+            subtitle="Batch Complete",
+            message=msg,
+            sound=False
+        )
+
+    def set_watch_folder(self, _):
+        response = rumps.Window(
+            title="Set Watch Folder",
+            message="Enter the path to your ProPresenter library folder:",
+            default_text=self._watch_dir,
+            ok="Set",
+            cancel="Cancel",
+            dimensions=(400, 20)
+        ).run()
+        if response.clicked == 1 and response.text.strip():
+            self._watch_dir = response.text.strip()
+            self._update_watch_labels()
+
+    def set_output_folder(self, _):
+        response = rumps.Window(
+            title="Set Output Folder",
+            message="Enter the path to save converted .pptx files:",
+            default_text=self._output_dir or os.path.expanduser("~/Desktop"),
+            ok="Set",
+            cancel="Cancel",
+            dimensions=(400, 20)
+        ).run()
+        if response.clicked == 1 and response.text.strip():
+            self._output_dir = response.text.strip()
+            self._update_watch_labels()
+
+    def quit_app(self, _):
+        if self._watcher:
+            self._watcher.stop()
+        rumps.quit_application()
+
+
+if __name__ == "__main__":
+    ConverterMenuBarApp().run()
