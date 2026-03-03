@@ -332,7 +332,21 @@ def convert_file(pro_path: str, output_dir: str, watch_root: str = None) -> tupl
     """
     base = os.path.splitext(os.path.basename(pro_path))[0]
     os.makedirs(output_dir, exist_ok=True)
-    out_path = os.path.join(output_dir, base + ".pptx")
+
+    # Avoid overwriting an existing file from a different source .pro path.
+    # If Amazing Grace.pptx already exists (and wasn't produced by THIS pro file),
+    # use Amazing Grace (2).pptx, Amazing Grace (3).pptx, etc.
+    candidate = os.path.join(output_dir, base + ".pptx")
+    if os.path.exists(candidate):
+        # Check if it was produced by this exact .pro file — if so, overwrite (re-convert)
+        abs_pro = os.path.abspath(pro_path)
+        produced_by_this = _history._data.get(abs_pro) is not None
+        if not produced_by_this:
+            counter = 2
+            while os.path.exists(os.path.join(output_dir, f"{base} ({counter}).pptx")):
+                counter += 1
+            candidate = os.path.join(output_dir, f"{base} ({counter}).pptx")
+    out_path = candidate
 
     parser = ProParser()
     slides = parser.parse(pro_path)
@@ -841,8 +855,9 @@ class ConverterApp:
             return
 
         self.convert_existing_btn.config(state="disabled")
-        self.progress.start(10)
-        self.status_var.set(f"Converting {len(new_files)} existing file(s)…")
+        # Switch to determinate mode so we can show real progress
+        self.progress.config(mode="determinate", maximum=len(new_files), value=0)
+        self.status_var.set(f"Converting 0 of {len(new_files)}…")
 
         threading.Thread(
             target=self._run_convert_existing,
@@ -852,6 +867,7 @@ class ConverterApp:
 
     def _run_convert_existing(self, pro_files: list, out_dir: str, watch_root: str):
         done, errors = 0, 0
+        total = len(pro_files)
         for path in pro_files:
             try:
                 rel = os.path.relpath(path, watch_root)
@@ -865,9 +881,18 @@ class ConverterApp:
             except Exception as exc:
                 errors += 1
                 self.root.after(0, self._log, f"{rel}: ERROR — {exc}")
+            # Update progress bar and status after each file
+            completed = done + errors
+            self.root.after(0, self._update_batch_progress, completed, total)
         self.root.after(0, self._on_convert_existing_done, done, errors)
 
+    def _update_batch_progress(self, completed: int, total: int):
+        self.progress.config(value=completed)
+        self.status_var.set(f"Converting {completed} of {total}…")
+
     def _on_convert_existing_done(self, done: int, errors: int):
+        # Reset progress bar back to indeterminate for future use
+        self.progress.config(mode="indeterminate", value=0)
         self.progress.stop()
         self.convert_existing_btn.config(state="normal")
         msg = f"Batch complete: {done} converted"
