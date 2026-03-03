@@ -1,0 +1,8 @@
+# Runtime dependencies
+protobuf>=4.21.0
+python-pptx>=0.6.21
+striprtf>=0.0.26
+watchdog>=3.0.0
+
+# Build-time only (compile .proto files to Python — not needed to run the app):
+# grpcio-tools>=1.50.0

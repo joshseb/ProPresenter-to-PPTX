@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment — recipients should create their own
+venv/
+
+# Conversion history (personal, machine-specific)
+converted_history.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# The .app bundle is large and built from source — distribute via DMG instead
+ProPresenter Converter.app/
+
+# DMG output
+*.dmg
+
+# Editor
+.vscode/
+.idea/
