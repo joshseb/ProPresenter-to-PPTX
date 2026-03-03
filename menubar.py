@@ -190,30 +190,44 @@ class ConverterMenuBarApp(rumps.App):
             sound=False
         )
 
+    def _pick_folder(self, title: str, default: str) -> str:
+        """Show a native macOS folder picker via osascript. Returns path or ''."""
+        default = default or os.path.expanduser("~")
+        script = (
+            f'tell application "Finder"\n'
+            f'  activate\n'
+            f'end tell\n'
+            f'set chosen to choose folder with prompt "{title}" '
+            f'default location (POSIX file "{default}")\n'
+            f'POSIX path of chosen'
+        )
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True, text=True, timeout=60
+            )
+            path = result.stdout.strip()
+            # osascript adds a trailing slash — remove it
+            return path.rstrip("/") if path else ""
+        except Exception:
+            return ""
+
     def set_watch_folder(self, _):
-        response = rumps.Window(
-            title="Set Watch Folder",
-            message="Enter the path to your ProPresenter library folder:",
-            default_text=self._watch_dir,
-            ok="Set",
-            cancel="Cancel",
-            dimensions=(400, 20)
-        ).run()
-        if response.clicked == 1 and response.text.strip():
-            self._watch_dir = response.text.strip()
+        path = self._pick_folder(
+            "Select your ProPresenter library folder to watch",
+            self._watch_dir
+        )
+        if path:
+            self._watch_dir = path
             self._update_watch_labels()
 
     def set_output_folder(self, _):
-        response = rumps.Window(
-            title="Set Output Folder",
-            message="Enter the path to save converted .pptx files:",
-            default_text=self._output_dir or os.path.expanduser("~/Desktop"),
-            ok="Set",
-            cancel="Cancel",
-            dimensions=(400, 20)
-        ).run()
-        if response.clicked == 1 and response.text.strip():
-            self._output_dir = response.text.strip()
+        path = self._pick_folder(
+            "Select folder to save converted PPTX files",
+            self._output_dir or os.path.expanduser("~/Desktop")
+        )
+        if path:
+            self._output_dir = path
             self._update_watch_labels()
 
     def quit_app(self, _):
