@@ -26,8 +26,12 @@ from pro_to_pptx import (
     DEFAULT_WATCH_FOLDER, WATCHDOG_AVAILABLE
 )
 
-ICON_PATH = os.path.join(_here,
-    "ProPresenter Converter.app", "Contents", "Resources", "AppIcon.icns")
+# Resolve Resources dir — works both from source and inside the .app bundle
+_resources = _here if os.path.exists(os.path.join(_here, "menubar_idle.png")) \
+             else os.path.join(_here, "ProPresenter Converter.app", "Contents", "Resources")
+
+ICON_IDLE   = os.path.join(_resources, "menubar_idle.png")    # greyed + slash = not watching
+ICON_ACTIVE = os.path.join(_resources, "menubar_active.png")  # full colour = watching
 
 
 class ConverterMenuBarApp(rumps.App):
@@ -35,9 +39,10 @@ class ConverterMenuBarApp(rumps.App):
     def __init__(self):
         super().__init__(
             name="ProPresenter Converter",
-            icon=ICON_PATH if os.path.exists(ICON_PATH) else None,
+            icon=ICON_IDLE if os.path.exists(ICON_IDLE) else None,
             quit_button=None   # we'll add our own at the bottom
         )
+        self.title = None   # no text next to icon
 
         self._watcher: FolderWatcher = None
         self._watch_dir  = DEFAULT_WATCH_FOLDER
@@ -108,14 +113,16 @@ class ConverterMenuBarApp(rumps.App):
         )
         self._watcher.start()
         self.menu["Watch Folder"].title = "⏹ Stop Watching"
-        self.title = "👁"   # show a subtle indicator in the menu bar text
+        if os.path.exists(ICON_ACTIVE):
+            self.icon = ICON_ACTIVE   # swap to full-colour icon
 
     def _stop_watch(self):
         if self._watcher:
             self._watcher.stop()
             self._watcher = None
         self.menu["Watch Folder"].title = "▶ Start Watching"
-        self.title = None
+        if os.path.exists(ICON_IDLE):
+            self.icon = ICON_IDLE   # swap back to greyed icon
 
     def _on_watch_event(self, pro_path, result):
         name = os.path.basename(pro_path)
