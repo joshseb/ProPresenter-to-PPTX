@@ -9,14 +9,26 @@ import sys
 import subprocess
 import threading
 
-# Ensure venv site-packages and project root are on the path
-_here = os.path.dirname(os.path.abspath(__file__))
-_site = os.path.join(_here, "venv", "lib",
-                     f"python{sys.version_info.major}.{sys.version_info.minor}",
-                     "site-packages")
-if os.path.isdir(_site):
-    sys.path.insert(0, _site)
-sys.path.insert(0, _here)
+# When frozen by PyInstaller, resources live in sys._MEIPASS.
+# When running from source, fall back to the script directory / bundled .app.
+if getattr(sys, 'frozen', False):
+    # Running as compiled PyInstaller app
+    _here      = os.path.dirname(sys.executable)
+    _resources = sys._MEIPASS
+    # Add proto_pb2 and project root to path
+    sys.path.insert(0, os.path.join(_resources, 'proto_pb2'))
+    sys.path.insert(0, _resources)
+else:
+    # Running from source — set up venv if needed
+    _here = os.path.dirname(os.path.abspath(__file__))
+    _site = os.path.join(_here, "venv", "lib",
+                         f"python{sys.version_info.major}.{sys.version_info.minor}",
+                         "site-packages")
+    if os.path.isdir(_site):
+        sys.path.insert(0, _site)
+    sys.path.insert(0, _here)
+    _resources = _here if os.path.exists(os.path.join(_here, "menubar_idle.png")) \
+                 else os.path.join(_here, "ProPresenter Converter.app", "Contents", "Resources")
 
 import rumps
 
@@ -25,10 +37,6 @@ from pro_to_pptx import (
     FolderWatcher, convert_file, _history,
     DEFAULT_WATCH_FOLDER, WATCHDOG_AVAILABLE
 )
-
-# Resolve Resources dir — works both from source and inside the .app bundle
-_resources = _here if os.path.exists(os.path.join(_here, "menubar_idle.png")) \
-             else os.path.join(_here, "ProPresenter Converter.app", "Contents", "Resources")
 
 ICON_IDLE   = os.path.join(_resources, "menubar_idle.png")    # greyed + slash = not watching
 ICON_ACTIVE = os.path.join(_resources, "menubar_active.png")  # full colour = watching
@@ -80,9 +88,19 @@ class ConverterMenuBarApp(rumps.App):
 
     def open_window(self, _):
         """Launch the full tkinter GUI as a separate process."""
+        if getattr(sys, 'frozen', False):
+            # Running compiled — look for the window app next to this .app
+            app_dir   = os.path.dirname(os.path.dirname(os.path.dirname(_here)))
+            window_app = os.path.join(os.path.dirname(app_dir),
+                                      "ProPresenter Converter Window.app")
+            if os.path.isdir(window_app):
+                subprocess.Popen(["open", window_app])
+                return
+        # Fallback: run pro_to_pptx.py directly with venv Python
         python = os.path.join(_here, "venv", "bin", "python3.13")
         script = os.path.join(_here, "pro_to_pptx.py")
-        subprocess.Popen([python, script])
+        if os.path.exists(python):
+            subprocess.Popen([python, script])
 
     def toggle_watch(self, sender):
         if self._watcher and self._watcher.running:
