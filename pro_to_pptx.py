@@ -11,8 +11,12 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-# Add proto_pb2 folder to path so compiled protobuf bindings are importable
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "proto_pb2"))
+# Add proto_pb2 folder to path so compiled protobuf bindings are importable.
+# In a PyInstaller frozen app, _MEIPASS is the bundle root; fall back to
+# the directory containing this script when running from source.
+_script_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(_script_dir, "proto_pb2"))
+sys.path.insert(0, _script_dir)  # also ensure the root is on path
 
 try:
     import presentation_pb2
