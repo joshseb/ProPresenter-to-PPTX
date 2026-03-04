@@ -20,6 +20,11 @@ ProPresenter Converter.app/
 # DMG output
 *.dmg
 
+# PyInstaller build output
+build/
+dist/
+*.spec.bak
+
 # Editor
 .vscode/
 .idea/
