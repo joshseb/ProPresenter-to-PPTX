@@ -23,7 +23,7 @@ try:
     import action_pb2
     import presentationSlide_pb2
     PROTO_AVAILABLE = True
-except ImportError:
+except Exception:
     PROTO_AVAILABLE = False
 
 try:

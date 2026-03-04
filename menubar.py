@@ -30,6 +30,18 @@ else:
     _resources = _here if os.path.exists(os.path.join(_here, "menubar_idle.png")) \
                  else os.path.join(_here, "ProPresenter Converter.app", "Contents", "Resources")
 
+# -----------------------------------------------------------------------
+# IMPORTANT: Check for --window flag BEFORE importing rumps/PyObjC.
+# Importing rumps initialises Cocoa's NSApplication which conflicts with
+# tkinter's own event loop.  When running as the converter window we skip
+# rumps entirely and go straight to the tkinter GUI.
+# -----------------------------------------------------------------------
+if "--window" in sys.argv:
+    from pro_to_pptx import main
+    main()
+    sys.exit(0)
+
+# --- menu bar path (rumps / PyObjC safe to import here) -----------------
 import rumps
 
 # Import the converter core (no GUI)
@@ -89,7 +101,9 @@ class ConverterMenuBarApp(rumps.App):
     def open_window(self, _):
         """Launch the full tkinter GUI as a separate process."""
         if getattr(sys, 'frozen', False):
-            # Re-launch this same compiled binary with --window flag
+            # Re-launch this same compiled binary with --window flag.
+            # The --window branch exits before importing rumps, so
+            # there is no PyObjC / tkinter event-loop conflict.
             subprocess.Popen([sys.executable, "--window"])
         else:
             # Running from source — launch with venv Python
@@ -277,19 +291,13 @@ def _acquire_lock():
 
 
 if __name__ == "__main__":
-    if "--window" in sys.argv:
-        # Launch the full tkinter GUI in-process (separate process already spawned)
-        sys.path.insert(0, _resources)
-        import runpy
-        runpy.run_path(os.path.join(_resources, "pro_to_pptx.py"), run_name="__main__")
-    else:
-        lock = _acquire_lock()
-        if lock is None:
-            # Another menu bar instance is already running — just bring attention to it
-            subprocess.run([
-                "osascript", "-e",
-                'display notification "ProPresenter Converter is already running in the menu bar." '
-                'with title "ProPresenter Converter"'
-            ])
-            sys.exit(0)
-        ConverterMenuBarApp().run()
+    lock = _acquire_lock()
+    if lock is None:
+        # Another menu bar instance is already running — just bring attention to it
+        subprocess.run([
+            "osascript", "-e",
+            'display notification "ProPresenter Converter is already running in the menu bar." '
+            'with title "ProPresenter Converter"'
+        ])
+        sys.exit(0)
+    ConverterMenuBarApp().run()
