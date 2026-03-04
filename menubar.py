@@ -89,18 +89,14 @@ class ConverterMenuBarApp(rumps.App):
     def open_window(self, _):
         """Launch the full tkinter GUI as a separate process."""
         if getattr(sys, 'frozen', False):
-            # Running compiled — look for the window app next to this .app
-            app_dir   = os.path.dirname(os.path.dirname(os.path.dirname(_here)))
-            window_app = os.path.join(os.path.dirname(app_dir),
-                                      "ProPresenter Converter Window.app")
-            if os.path.isdir(window_app):
-                subprocess.Popen(["open", window_app])
-                return
-        # Fallback: run pro_to_pptx.py directly with venv Python
-        python = os.path.join(_here, "venv", "bin", "python3.13")
-        script = os.path.join(_here, "pro_to_pptx.py")
-        if os.path.exists(python):
-            subprocess.Popen([python, script])
+            # Re-launch this same compiled binary with --window flag
+            subprocess.Popen([sys.executable, "--window"])
+        else:
+            # Running from source — launch with venv Python
+            python = os.path.join(_here, "venv", "bin", "python3.13")
+            script = os.path.join(_here, "pro_to_pptx.py")
+            if os.path.exists(python):
+                subprocess.Popen([python, script])
 
     def toggle_watch(self, sender):
         if self._watcher and self._watcher.running:
@@ -261,5 +257,39 @@ class ConverterMenuBarApp(rumps.App):
         rumps.quit_application()
 
 
+def _acquire_lock():
+    """
+    Create a lock file so only one menu bar instance runs at a time.
+    Returns the lock file handle, or None if another instance is already running.
+    """
+    import fcntl
+    lock_path = os.path.join(
+        os.path.expanduser("~/Library/Application Support/ProPresenter Converter"),
+        "menubar.lock"
+    )
+    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+    try:
+        fh = open(lock_path, "w")
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fh
+    except OSError:
+        return None  # already locked — another instance is running
+
+
 if __name__ == "__main__":
-    ConverterMenuBarApp().run()
+    if "--window" in sys.argv:
+        # Launch the full tkinter GUI in-process (separate process already spawned)
+        sys.path.insert(0, _resources)
+        import runpy
+        runpy.run_path(os.path.join(_resources, "pro_to_pptx.py"), run_name="__main__")
+    else:
+        lock = _acquire_lock()
+        if lock is None:
+            # Another menu bar instance is already running — just bring attention to it
+            subprocess.run([
+                "osascript", "-e",
+                'display notification "ProPresenter Converter is already running in the menu bar." '
+                'with title "ProPresenter Converter"'
+            ])
+            sys.exit(0)
+        ConverterMenuBarApp().run()

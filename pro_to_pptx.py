@@ -58,8 +58,12 @@ BG_COLOR        = RGBColor(0x00, 0x00, 0x00) if PPTX_AVAILABLE else None
 
 DEFAULT_WATCH_FOLDER = os.path.expanduser("~/Documents/ProPresenter")
 
-# History file lives alongside pro_to_pptx.py
-HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "converted_history.json")
+# Persistent app support dir — stable across PyInstaller runs and .app moves
+_APP_SUPPORT = os.path.expanduser("~/Library/Application Support/ProPresenter Converter")
+os.makedirs(_APP_SUPPORT, exist_ok=True)
+
+# History file always lives in Application Support, never in a temp/bundle path
+HISTORY_FILE = os.path.join(_APP_SUPPORT, "converted_history.json")
 
 # ---------------------------------------------------------------------------
 # ConversionHistory – tracks which files have already been converted
