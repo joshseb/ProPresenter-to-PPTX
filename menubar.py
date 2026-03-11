@@ -207,17 +207,32 @@ class ConverterMenuBarApp(rumps.App):
         ).start()
 
     def _run_batch(self, files):
+        import traceback, time
+        _log_dir = os.path.expanduser("~/Library/Logs/ProPresenter Converter")
+        os.makedirs(_log_dir, exist_ok=True)
+        _log_file = os.path.join(_log_dir, "debug.log")
+        def _log(msg):
+            with open(_log_file, "a") as f:
+                f.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
+
         done, errors = 0, 0
+        error_msgs = []
+        _log(f"_run_batch: {len(files)} files, output={self._output_dir}")
         for path in files:
             try:
                 convert_file(path, self._output_dir)
                 done += 1
-            except Exception:
+                _log(f"OK: {os.path.basename(path)}")
+            except Exception as e:
                 errors += 1
+                err = f"{os.path.basename(path)}: {e}\n{traceback.format_exc()}"
+                error_msgs.append(err)
+                _log(f"FAIL: {err}")
 
         msg = f"{done} file(s) converted"
         if errors:
-            msg += f", {errors} failed"
+            msg += f", {errors} failed — check ~/Library/Logs/ProPresenter Converter/debug.log"
+        _log(f"_run_batch done: {done} OK, {errors} failed")
         rumps.notification(
             title="ProPresenter Converter",
             subtitle="Batch Complete",
