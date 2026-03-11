@@ -8,29 +8,54 @@ import sys
 import time
 import json
 import threading
+import traceback
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+
+# ---------------------------------------------------------------------------
+# Debug log — written to ~/Library/Logs so we can diagnose frozen-app issues
+# ---------------------------------------------------------------------------
+_LOG_DIR = os.path.expanduser("~/Library/Logs/ProPresenter Converter")
+os.makedirs(_LOG_DIR, exist_ok=True)
+_LOG_FILE = os.path.join(_LOG_DIR, "debug.log")
+
+def _log(msg: str):
+    try:
+        with open(_LOG_FILE, "a", encoding="utf-8") as _f:
+            _f.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
+    except Exception:
+        pass
+
+_log("=== pro_to_pptx starting ===")
+_log(f"frozen={getattr(sys, 'frozen', False)}  executable={sys.executable}")
+_log(f"_MEIPASS={getattr(sys, '_MEIPASS', 'N/A')}")
 
 # Add proto_pb2 folder to path so compiled protobuf bindings are importable.
 # In a PyInstaller frozen app, _MEIPASS is the bundle root; fall back to
 # the directory containing this script when running from source.
 _script_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_script_dir, "proto_pb2"))
-sys.path.insert(0, _script_dir)  # also ensure the root is on path
+sys.path.insert(0, _script_dir)
+_log(f"_script_dir={_script_dir}")
+_log(f"proto_pb2 dir exists: {os.path.isdir(os.path.join(_script_dir, 'proto_pb2'))}")
 
 try:
     import presentation_pb2
     import action_pb2
     import presentationSlide_pb2
     PROTO_AVAILABLE = True
-except Exception:
+    _log("proto imports: OK")
+except Exception as _e:
     PROTO_AVAILABLE = False
+    _log(f"proto imports FAILED: {_e}\n{traceback.format_exc()}")
 
 try:
     from striprtf.striprtf import rtf_to_text
     STRIPRTF_AVAILABLE = True
-except ImportError:
+    _log("striprtf: OK")
+except Exception as _e:
     STRIPRTF_AVAILABLE = False
+    _log(f"striprtf FAILED: {_e}")
 
 try:
     from pptx import Presentation as PptxPresentation
@@ -38,15 +63,19 @@ try:
     from pptx.dml.color import RGBColor
     from pptx.enum.text import PP_ALIGN
     PPTX_AVAILABLE = True
-except ImportError:
+    _log("pptx: OK")
+except Exception as _e:
     PPTX_AVAILABLE = False
+    _log(f"pptx FAILED: {_e}")
 
 try:
     from watchdog.observers import Observer
     from watchdog.events import FileSystemEventHandler
     WATCHDOG_AVAILABLE = True
-except ImportError:
+    _log("watchdog: OK")
+except Exception as _e:
     WATCHDOG_AVAILABLE = False
+    _log(f"watchdog FAILED: {_e}")
 
 # ---------------------------------------------------------------------------
 # Constants
