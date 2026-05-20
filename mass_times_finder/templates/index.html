@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mass Times Route Finder</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+      background: #f0f4f8;
+      color: #1a202c;
+    }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: 380px;
+      min-width: 320px;
+      display: flex;
+      flex-direction: column;
+      background: #fff;
+      box-shadow: 2px 0 12px rgba(0,0,0,.12);
+      z-index: 1000;
+      overflow: hidden;
+    }
+
+    /* Header */
+    #header {
+      background: linear-gradient(135deg, #1a56db 0%, #1e429f 100%);
+      color: #fff;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    #header .cross-icon {
+      font-size: 22px;
+      line-height: 1;
+    }
+    #header h1 {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      line-height: 1.3;
+    }
+    #header p {
+      font-size: 11px;
+      opacity: 0.85;
+      margin-top: 1px;
+    }
+
+    /* Controls */
+    #controls {
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid #e2e8f0;
+      flex-shrink: 0;
+    }
+
+    .form-group {
+      margin-bottom: 12px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #718096;
+      margin-bottom: 5px;
+    }
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1.5px solid #cbd5e0;
+      border-radius: 8px;
+      font-size: 14px;
+      color: #2d3748;
+      background: #fff;
+      transition: border-color .2s, box-shadow .2s;
+      outline: none;
+    }
+    .form-group input:focus,
+    .form-group select:focus {
+      border-color: #1a56db;
+      box-shadow: 0 0 0 3px rgba(26,86,219,.15);
+    }
+    .form-group input::placeholder { color: #a0aec0; }
+
+    .form-row {
+      display: flex;
+      gap: 10px;
+    }
+    .form-row .form-group { flex: 1; }
+
+    #search-btn {
+      width: 100%;
+      padding: 11px;
+      background: linear-gradient(135deg, #1a56db, #1e429f);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .2s, transform .1s;
+      margin-top: 4px;
+      letter-spacing: 0.2px;
+    }
+    #search-btn:hover { opacity: 0.92; }
+    #search-btn:active { transform: scale(.98); }
+    #search-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    /* Route info */
+    #route-info {
+      display: none;
+      margin-top: 12px;
+      background: #ebf5ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #1e429f;
+      display: none;
+      gap: 16px;
+    }
+    #route-info.visible {
+      display: flex;
+    }
+    .route-stat { text-align: center; flex: 1; }
+    .route-stat .val { font-size: 18px; font-weight: 700; display: block; }
+    .route-stat .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.75; }
+
+    /* Loading */
+    #loading {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 24px 20px;
+      color: #4a5568;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    #loading.visible { display: flex; }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #1a56db;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Error */
+    #error-msg {
+      display: none;
+      margin: 0 20px 10px;
+      padding: 10px 14px;
+      background: #fff5f5;
+      border: 1px solid #fed7d7;
+      border-radius: 8px;
+      color: #c53030;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    #error-msg.visible { display: block; }
+
+    /* Results */
+    #results-header {
+      padding: 12px 20px 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #718096;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #f0f4f8;
+      flex-shrink: 0;
+      display: none;
+    }
+    #results-header.visible { display: block; }
+
+    #results-list {
+      overflow-y: auto;
+      flex: 1;
+      padding: 8px 12px 16px;
+    }
+
+    /* Church card */
+    .church-card {
+      background: #fff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: border-color .2s, box-shadow .2s, transform .1s;
+    }
+    .church-card:hover {
+      border-color: #7c3aed;
+      box-shadow: 0 2px 10px rgba(124,58,237,.15);
+      transform: translateY(-1px);
+    }
+    .church-card.active {
+      border-color: #7c3aed;
+      box-shadow: 0 0 0 3px rgba(124,58,237,.15);
+    }
+
+    .church-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1a202c;
+      margin-bottom: 3px;
+      line-height: 1.35;
+    }
+    .church-location {
+      font-size: 12px;
+      color: #718096;
+      margin-bottom: 6px;
+    }
+    .church-address {
+      font-size: 12px;
+      color: #4a5568;
+      margin-bottom: 7px;
+    }
+
+    .mass-times-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 7px;
+    }
+    .time-pill {
+      background: #ede9fe;
+      color: #5b21b6;
+      border-radius: 20px;
+      padding: 2px 9px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .no-times {
+      font-size: 11px;
+      color: #a0aec0;
+      font-style: italic;
+    }
+
+    .card-footer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 5px;
+      flex-wrap: wrap;
+    }
+    .source-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .source-badge.masstimes {
+      background: #dcfce7;
+      color: #166534;
+    }
+    .source-badge.osm {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    .card-link {
+      font-size: 11px;
+      color: #1a56db;
+      text-decoration: none;
+      margin-left: auto;
+    }
+    .card-link:hover { text-decoration: underline; }
+
+    /* Map */
+    #map-container {
+      flex: 1;
+      position: relative;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Leaflet popup tweaks */
+    .leaflet-popup-content {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+      min-width: 200px;
+      max-width: 280px;
+    }
+    .popup-name {
+      font-weight: 700;
+      font-size: 14px;
+      color: #1a202c;
+      margin-bottom: 4px;
+    }
+    .popup-addr { color: #4a5568; font-size: 12px; margin-bottom: 6px; }
+    .popup-times { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
+    .popup-pill {
+      background: #ede9fe;
+      color: #5b21b6;
+      border-radius: 20px;
+      padding: 1px 8px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .popup-no-times { color: #a0aec0; font-size: 11px; font-style: italic; }
+    .popup-link { font-size: 11px; color: #1a56db; }
+    .popup-source { font-size: 10px; color: #a0aec0; margin-top: 4px; }
+
+    /* Church DivIcon */
+    .church-marker {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      background: #7c3aed;
+      border: 2.5px solid #fff;
+      border-radius: 50%;
+      box-shadow: 0 2px 6px rgba(0,0,0,.35);
+      font-size: 17px;
+      line-height: 1;
+    }
+    .church-marker.highlight {
+      background: #4f46e5;
+      box-shadow: 0 0 0 4px rgba(124,58,237,.4), 0 2px 8px rgba(0,0,0,.4);
+      transform: scale(1.18);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Sidebar ── -->
+<aside id="sidebar">
+
+  <div id="header">
+    <span class="cross-icon">✝</span>
+    <div>
+      <h1>Mass Times Route Finder</h1>
+      <p>Find Catholic churches along your drive</p>
+    </div>
+  </div>
+
+  <div id="controls">
+    <div class="form-group">
+      <label for="start-input">From</label>
+      <input id="start-input" type="text" placeholder="Delray Beach, FL" autocomplete="off" />
+    </div>
+    <div class="form-group">
+      <label for="end-input">To</label>
+      <input id="end-input" type="text" placeholder="Frisco, TX" autocomplete="off" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="day-select">Day of Week</label>
+        <select id="day-select">
+          <option value="all">All Days</option>
+          <option value="sunday">Sunday</option>
+          <option value="monday">Monday</option>
+          <option value="tuesday">Tuesday</option>
+          <option value="wednesday">Wednesday</option>
+          <option value="thursday">Thursday</option>
+          <option value="friday">Friday</option>
+          <option value="saturday">Saturday</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="radius-select">Search Radius</label>
+        <select id="radius-select">
+          <option value="10">10 miles</option>
+          <option value="25" selected>25 miles</option>
+          <option value="50">50 miles</option>
+        </select>
+      </div>
+    </div>
+
+    <button id="search-btn" onclick="doSearch()">⛪ Find Masses Along Route</button>
+
+    <div id="route-info">
+      <div class="route-stat">
+        <span class="val" id="stat-dist">—</span>
+        <span class="lbl">miles</span>
+      </div>
+      <div class="route-stat">
+        <span class="val" id="stat-dur">—</span>
+        <span class="lbl">hours est.</span>
+      </div>
+      <div class="route-stat">
+        <span class="val" id="stat-count">—</span>
+        <span class="lbl">churches</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <span>Searching for churches along your route…</span>
+  </div>
+
+  <div id="error-msg"></div>
+
+  <div id="results-header"></div>
+  <div id="results-list"></div>
+
+</aside>
+
+<!-- ── Map ── -->
+<div id="map-container">
+  <div id="map"></div>
+</div>
+
+<script>
+  // ── Map setup ─────────────────────────────────────────────
+  const map = L.map('map', { zoomControl: true }).setView([38, -96], 4);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+
+  // ── State ─────────────────────────────────────────────────
+  let routeLayer = null;
+  let markerGroup = L.layerGroup().addTo(map);
+  let churchMarkers = [];   // [{marker, card, index}]
+  let activeIndex = -1;
+
+  // ── Icons ─────────────────────────────────────────────────
+  function churchIcon(highlight = false) {
+    return L.divIcon({
+      className: '',
+      html: `<div class="church-marker${highlight ? ' highlight' : ''}">⛪</div>`,
+      iconSize: [34, 34],
+      iconAnchor: [17, 17],
+      popupAnchor: [0, -18],
+    });
+  }
+
+  const startIcon = L.divIcon({
+    className: '',
+    html: `<div style="width:14px;height:14px;background:#16a34a;border:2.5px solid #fff;border-radius:50%;box-shadow:0 2px 5px rgba(0,0,0,.4)"></div>`,
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  });
+
+  const endIcon = L.divIcon({
+    className: '',
+    html: `<div style="width:14px;height:14px;background:#dc2626;border:2.5px solid #fff;border-radius:50%;box-shadow:0 2px 5px rgba(0,0,0,.4)"></div>`,
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  });
+
+  // ── UI helpers ────────────────────────────────────────────
+  function setLoading(on) {
+    document.getElementById('loading').classList.toggle('visible', on);
+    document.getElementById('search-btn').disabled = on;
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('error-msg');
+    el.textContent = msg;
+    el.classList.add('visible');
+  }
+
+  function clearError() {
+    document.getElementById('error-msg').classList.remove('visible');
+  }
+
+  function clearResults() {
+    document.getElementById('results-list').innerHTML = '';
+    document.getElementById('results-header').classList.remove('visible');
+    document.getElementById('route-info').classList.remove('visible');
+  }
+
+  function buildPopupHTML(c) {
+    const location = [c.city, c.state].filter(Boolean).join(', ');
+    const addr = [c.address, location].filter(Boolean).join(' — ');
+
+    let timesHTML = '';
+    if (c.mass_times && c.mass_times.length > 0) {
+      timesHTML = `<div class="popup-times">${c.mass_times.map(t => `<span class="popup-pill">${escHtml(t)}</span>`).join('')}</div>`;
+    } else {
+      timesHTML = `<p class="popup-no-times">Times not available — check website</p>`;
+    }
+
+    let linkHTML = '';
+    if (c.website) {
+      linkHTML = `<a class="popup-link" href="${escHtml(c.website)}" target="_blank" rel="noopener">Website ↗</a>`;
+    } else if (c.source === 'openstreetmap' && location) {
+      const searchURL = `https://www.masstimes.org/search?q=${encodeURIComponent(location)}`;
+      linkHTML = `<a class="popup-link" href="${searchURL}" target="_blank" rel="noopener">Search MassTimes.org ↗</a>`;
+    }
+
+    return `
+      <div class="popup-name">${escHtml(c.name)}</div>
+      ${addr ? `<div class="popup-addr">${escHtml(addr)}</div>` : ''}
+      ${timesHTML}
+      ${linkHTML}
+      <div class="popup-source">Source: ${c.source === 'masstimes.org' ? 'MassTimes.org' : 'OpenStreetMap'}</div>
+    `;
+  }
+
+  function buildCardHTML(c, idx) {
+    const location = [c.city, c.state].filter(Boolean).join(', ');
+    const addr = c.address || '';
+
+    let timesHTML = '';
+    if (c.mass_times && c.mass_times.length > 0) {
+      timesHTML = `<div class="mass-times-row">${c.mass_times.map(t => `<span class="time-pill">${escHtml(t)}</span>`).join('')}</div>`;
+    } else {
+      timesHTML = `<p class="no-times">Times not available — check website</p>`;
+    }
+
+    const sourceBadge = c.source === 'masstimes.org'
+      ? `<span class="source-badge masstimes">MassTimes.org</span>`
+      : `<span class="source-badge osm">OpenStreetMap</span>`;
+
+    let linkHTML = '';
+    if (c.website) {
+      linkHTML = `<a class="card-link" href="${escHtml(c.website)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Website ↗</a>`;
+    } else if (c.source === 'openstreetmap' && location) {
+      const searchURL = `https://www.masstimes.org/search?q=${encodeURIComponent(location)}`;
+      linkHTML = `<a class="card-link" href="${searchURL}" target="_blank" rel="noopener" onclick="event.stopPropagation()">MassTimes.org ↗</a>`;
+    }
+
+    return `
+      <div class="church-card" id="card-${idx}" onclick="activateChurch(${idx})">
+        <div class="church-name">${escHtml(c.name)}</div>
+        ${location ? `<div class="church-location">📍 ${escHtml(location)}</div>` : ''}
+        ${addr ? `<div class="church-address">${escHtml(addr)}</div>` : ''}
+        ${timesHTML}
+        <div class="card-footer">
+          ${sourceBadge}
+          ${linkHTML}
+        </div>
+      </div>
+    `;
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── Activate a church (sync card + marker) ────────────────
+  function activateChurch(idx) {
+    // Deactivate previous
+    if (activeIndex >= 0) {
+      const prev = churchMarkers[activeIndex];
+      if (prev) {
+        prev.marker.setIcon(churchIcon(false));
+        document.getElementById(`card-${activeIndex}`)?.classList.remove('active');
+      }
+    }
+
+    activeIndex = idx;
+    const item = churchMarkers[idx];
+    if (!item) return;
+
+    // Highlight marker
+    item.marker.setIcon(churchIcon(true));
+    item.marker.openPopup();
+    map.panTo(item.marker.getLatLng(), { animate: true });
+
+    // Highlight card and scroll into view
+    const card = document.getElementById(`card-${idx}`);
+    if (card) {
+      card.classList.add('active');
+      card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  // ── Main search ────────────────────────────────────────────
+  async function doSearch() {
+    const start = document.getElementById('start-input').value.trim();
+    const end = document.getElementById('end-input').value.trim();
+    const day = document.getElementById('day-select').value;
+    const radius = document.getElementById('radius-select').value;
+
+    if (!start || !end) {
+      showError('Please enter both a start and end address.');
+      return;
+    }
+
+    clearError();
+    clearResults();
+    setLoading(true);
+
+    // Clear map layers
+    if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+    markerGroup.clearLayers();
+    churchMarkers = [];
+    activeIndex = -1;
+
+    try {
+      const resp = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ start, end, day, radius: parseInt(radius), interval: 50 }),
+      });
+
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        showError(data.error || 'An unexpected error occurred.');
+        return;
+      }
+
+      renderResults(data);
+
+    } catch (err) {
+      showError('Network error — please check your connection and try again.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function renderResults(data) {
+    const { route, churches, start, end } = data;
+
+    // Draw route polyline
+    routeLayer = L.polyline(route.coordinates, {
+      color: '#1a56db',
+      weight: 4,
+      opacity: 0.75,
+    }).addTo(map);
+
+    // Start / end markers
+    L.marker([start.lat, start.lng], { icon: startIcon })
+      .bindPopup(`<b>Start:</b> ${escHtml(start.address)}`)
+      .addTo(markerGroup);
+
+    L.marker([end.lat, end.lng], { icon: endIcon })
+      .bindPopup(`<b>End:</b> ${escHtml(end.address)}`)
+      .addTo(markerGroup);
+
+    // Church markers
+    churches.forEach((c, idx) => {
+      const marker = L.marker([c.lat, c.lng], { icon: churchIcon(false) })
+        .bindPopup(buildPopupHTML(c), { maxWidth: 300 })
+        .addTo(markerGroup);
+
+      marker.on('click', () => activateChurch(idx));
+
+      churchMarkers.push({ marker });
+    });
+
+    // Fit map to route
+    const bounds = routeLayer.getBounds();
+    map.fitBounds(bounds.pad(0.08));
+
+    // Route stats
+    document.getElementById('stat-dist').textContent = route.distance_miles;
+    document.getElementById('stat-dur').textContent = route.duration_hours;
+    document.getElementById('stat-count').textContent = churches.length;
+    document.getElementById('route-info').classList.add('visible');
+
+    // Results header
+    const hdr = document.getElementById('results-header');
+    hdr.textContent = churches.length === 0
+      ? 'No churches found along this route'
+      : `${churches.length} church${churches.length === 1 ? '' : 'es'} found along route`;
+    hdr.classList.add('visible');
+
+    // Results list
+    const list = document.getElementById('results-list');
+    if (churches.length === 0) {
+      list.innerHTML = `<p style="text-align:center;color:#a0aec0;font-size:13px;padding:24px 0;">Try increasing the search radius or interval.</p>`;
+    } else {
+      list.innerHTML = churches.map((c, i) => buildCardHTML(c, i)).join('');
+    }
+  }
+
+  // Allow Enter key on inputs
+  ['start-input', 'end-input'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', e => {
+      if (e.key === 'Enter') doSearch();
+    });
+  });
+</script>
+</body>
+</html>
